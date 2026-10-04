@@ -1,1 +1,589 @@
-[File content (23005 chars) omitted — read and uploaded from local workspace]
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="theme-color" content="#07080d">
+<title>SandLab — Physics Sandbox</title>
+<style>
+  :root{
+    --bg:#07080d; --panel:#0e1120; --panel2:#12162a;
+    --line:#222a45; --txt:#e6ebff; --dim:#8490b5;
+    --acc:#31e0c8; --acc2:#6b8cff; --warn:#ff8a3d;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overflow:hidden;}
+  #wrap{position:fixed;inset:0;display:flex;flex-direction:column;}
+  /* ---- top bar ---- */
+  #top{display:flex;align-items:center;gap:8px;padding:8px 10px;
+    background:linear-gradient(180deg,#0d1120,#0a0d18);border-bottom:1px solid var(--line);z-index:5;}
+  #brand{font-weight:800;letter-spacing:.5px;font-size:15px;
+    background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  #brand span{font-size:10px;color:var(--dim);-webkit-text-fill-color:var(--dim);margin-left:5px;}
+  #stats{margin-left:auto;display:flex;gap:10px;font-size:10px;color:var(--dim);}
+  #stats b{color:var(--acc);font-variant-numeric:tabular-nums;}
+  /* ---- stage ---- */
+  #stage{flex:1;position:relative;background:#05060a;overflow:hidden;}
+  #cv{width:100%;height:100%;display:block;touch-action:none;image-rendering:pixelated;cursor:crosshair;}
+  #hint{position:absolute;left:50%;top:12px;transform:translateX(-50%);
+    font-size:11px;color:var(--dim);background:rgba(7,8,13,.7);padding:5px 12px;border-radius:20px;
+    border:1px solid var(--line);pointer-events:none;transition:opacity .5s;}
+  /* ---- toolbar ---- */
+  #bar{display:flex;gap:6px;padding:8px 8px;background:#0a0d18;border-top:1px solid var(--line);overflow-x:auto;}
+  .tbtn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:2px;
+    min-width:56px;padding:7px 8px;border-radius:10px;border:1px solid var(--line);
+    background:var(--panel);color:var(--txt);font-size:9px;font-weight:600;cursor:pointer;}
+  .tbtn .ic{font-size:16px;line-height:1;}
+  .tbtn:active{transform:scale(.94);}
+  .tbtn.on{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset;}
+  /* ---- material dock ---- */
+  #dock{background:linear-gradient(180deg,#0a0d18,#0d1120);border-top:1px solid var(--line);
+    padding:8px 8px 10px;max-height:34vh;overflow-y:auto;}
+  #matName{font-size:11px;font-weight:700;color:var(--acc);margin:0 2px 7px;letter-spacing:.3px;}
+  #mats{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px;}
+  .mat{display:flex;flex-direction:column;align-items:center;gap:3px;
+    padding:8px 4px;border-radius:10px;border:1px solid var(--line);background:var(--panel);
+    color:var(--dim);font-size:10px;font-weight:600;cursor:pointer;}
+  .mat .ico{font-size:18px;line-height:1;}
+  .mat.active{border-color:var(--acc);color:var(--txt);background:var(--panel2);
+    box-shadow:0 0 12px rgba(49,224,200,.25), 0 0 0 1px var(--acc) inset;}
+  .mat:active{transform:scale(.95);}
+  #brush{display:flex;align-items:center;gap:8px;margin:8px 2px 0;font-size:10px;color:var(--dim);}
+  #brush button{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);
+    background:var(--panel);color:var(--txt);font-size:15px;font-weight:700;cursor:pointer;}
+</style>
+</head>
+<body>
+<div id="wrap">
+
+  <div id="top">
+    <div id="brand">SandLab<span>physics sandbox</span></div>
+    <div id="stats">
+      <div>células <b id="particles">0</b></div>
+      <div>tick <b id="tick">0</b></div>
+      <div>cheio <b id="fill">0%</b></div>
+    </div>
+  </div>
+
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="hint">Toque e arraste na tela para pintar 🎨</div>
+  </div>
+
+  <div id="bar">
+    <button class="tbtn" id="btnPause"><span class="ic">⏸</span>Pause</button>
+    <button class="tbtn" id="btnClear"><span class="ic">🗑️</span>Limpar</button>
+    <button class="tbtn" id="btnRain"><span class="ic">🌧️</span>Chuva</button>
+    <button class="tbtn" id="btnRainFire"><span class="ic">☄️</span>Meteoro</button>
+    <button class="tbtn" id="btnLite"><span class="ic">⚡</span>Lite:OFF</button>
+  </div>
+
+  <div id="dock">
+    <div id="matName">🏖️ Areia</div>
+    <div id="mats"></div>
+    <div id="brush">Pincel <button id="brushDn">−</button> <button id="brushUp">+</button></div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   SandLab — falling-sand + particle physics sandbox
+   Materials: sand, water, stone, wood, ice, plant, fire, lava, oil,
+   acid, steam, smoke, gunpowder, bomb, lightning, nuclear, ant, fish
+   ===================================================================== */
+
+/* ---- material ids ---- */
+const EMPTY=0, SAND=1, WATER=2, STONE=3, WOOD=4, ICE=5, PLANT=6, FIRE=7,
+      LAVA=8, OIL=9, ACID=10, STEAM=11, SMOKE=12, POWDER=13, BOMB=14,
+      LIGHTNING=15, NUKED=16, ANT=17, FISH=18, ERASER=99;
+
+/* ---- global state ---- */
+let GW=0, GH=0, CELL=4;
+let grid=null, grid2=null, life=null, noise=null;
+let current=SAND, brush=3, paused=false, tick=0;
+let soundOn=false;
+let LITE = false;
+
+/* ---- detect weak device -> default LITE ---- */
+(function(){
+  const small = Math.min(screen.width,screen.height) < 620;
+  const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  const weak = (navigator.hardwareConcurrency||8) <= 4;
+  LITE = small || mobile || weak;
+})();
+
+/* ---- canvas ---- */
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d', {alpha:false});
+
+/* ---- colors ---- */
+const BASE={};
+BASE[EMPTY]=[7,8,13];    BASE[SAND]=[214,178,96];  BASE[WATER]=[54,120,224];
+BASE[STONE]=[110,116,132];BASE[WOOD]=[122,78,44];   BASE[ICE]=[150,220,255];
+BASE[PLANT]=[60,200,90];  BASE[FIRE]=[255,140,30];  BASE[LAVA]=[255,70,20];
+BASE[OIL]=[70,44,30];     BASE[ACID]=[150,255,70];  BASE[STEAM]=[190,200,220];
+BASE[SMOKE]=[80,84,96];   BASE[POWDER]=[92,88,82];  BASE[BOMB]=[42,42,50];
+BASE[LIGHTNING]=[210,235,255];BASE[NUKED]=[120,255,170];BASE[ANT]=[44,32,26];
+BASE[FISH]=[255,170,60];
+function clampB(v){ return v<0?0:(v>255?255:v); }
+
+/* ---- grid alloc ---- */
+function alloc(){
+  const n=GW*GH;
+  grid=new Uint8Array(n); grid2=new Uint8Array(n);
+  life=new Int16Array(n); noise=new Uint8Array(n);
+  for(let i=0;i<n;i++) noise[i]=(Math.random()*56-28)|0;
+}
+function inb(x,y){ return x>=0&&y>=0&&x<GW&&y<GH; }
+
+function resize(){
+  const w=cv.clientWidth||window.innerWidth, h=cv.clientHeight||window.innerHeight;
+  CELL = LITE?5:4;
+  const nw=Math.max(40,Math.floor(w/CELL)), nh=Math.max(40,Math.floor(h/CELL));
+  const oldG=grid, oldW=GW, oldH=GH;
+  GW=nw; GH=nh; cv.width=nw; cv.height=nh;
+  ctx.imageSmoothingEnabled=false;
+  alloc();
+  if(oldG){
+    const ow=Math.min(oldW,GW), oh=Math.min(oldH,GH);
+    for(let y=0;y<oh;y++) for(let x=0;x<ow;x++) grid[y*GW+x]=oldG[y*oldW+x];
+  }
+  initRender();
+}
+
+/* ---- cell utils ---- */
+function swap(a,b){ const t=grid[a]; grid[a]=grid[b]; grid[b]=t;
+  const l=life[a]; life[a]=life[b]; life[b]=l; }
+function setCell(i,m,l){ grid[i]=m; life[i]=l|0; }
+
+/* =============== SIMULATION =============== */
+function step(){
+  const g=grid, mk=grid2, L=life;
+  mk.fill(0);
+  const dir=(tick&1)?1:-1;
+
+  for(let y=GH-1;y>=0;y--){
+    const row=y*GW;
+    for(let k=0;k<GW;k++){
+      const x = dir>0?k:GW-1-k;
+      const i = row+x;
+      if(mk[i]) continue;
+      const t=g[i];
+      if(t===EMPTY) continue;
+      const below=i+GW;
+
+      /* ---------- POWDERS ---------- */
+      if(t===SAND||t===POWDER){
+        if(y+1<GH){
+          const b=g[below];
+          if(b===EMPTY||b===STEAM||b===SMOKE||b===WATER||b===OIL||b===ACID){
+            swap(i,below); mk[below]=1; continue;
+          }
+          const canL = x>0 && (g[below-1]===EMPTY||b===STEAM);
+          const canR = x<GW-1 && (g[below+1]===EMPTY);
+          if(canL&&canR){ const s=Math.random()<0.5?-1:1; swap(i,below+s); mk[below+s]=1; continue; }
+          if(canL){ swap(i,below-1); mk[below-1]=1; continue; }
+          if(canR){ swap(i,below+1); mk[below+1]=1; continue; }
+        }
+        continue;
+      }
+
+      /* ---------- LIQUIDS ---------- */
+      if(t===WATER||t===OIL||t===ACID||t===LAVA){
+        const dens = t===OIL?1 : (t===LAVA?6:2);
+        if(y+1<GH){
+          const b=g[below];
+          let bd=undefined;
+          if(b===EMPTY||b===STEAM||b===SMOKE) bd=0;
+          else if(b===WATER) bd=2; else if(b===OIL) bd=1;
+          else if(b===ACID) bd=2; else if(b===LAVA) bd=6;
+          if(bd!==undefined && bd<dens){ swap(i,below); mk[below]=1; continue; }
+        }
+        const go=Math.random()<0.5?-1:1;
+        let moved=false;
+        for(const s of [go,-go]){
+          if(x+s<0||x+s>=GW) continue;
+          const j=i+s;
+          if(g[j]===EMPTY||g[j]===STEAM||g[j]===SMOKE){ swap(i,j); mk[j]=1; moved=true; break; }
+        }
+        if(!moved && y+1<GH){
+          for(const s of [go,-go]){
+            if(x+s<0||x+s>=GW) continue;
+            const j=below+s;
+            if(g[j]===EMPTY){ swap(i,j); mk[j]=1; break; }
+          }
+        }
+
+        if(t===LAVA){
+          if(Math.random()<0.03){ const up=i-GW; if(y>0&&g[up]===EMPTY) setCell(up,FIRE,20+(Math.random()*20|0)); }
+          for(const s of [-1,1,-GW,GW]){
+            const j=i+s; if(j<0||j>=g.length) continue;
+            const n=g[j];
+            if(n===ICE||n===WATER){ if(Math.random()<0.5) g[j]=STEAM, life[j]=60; }
+            else if(n===PLANT||n===WOOD||n===OIL){ if(Math.random()<0.3) setCell(j,FIRE,30); }
+            else if(n===SAND){ if(Math.random()<0.02) g[j]=STONE; }
+            else if(n===ANT||n===FISH){ setCell(j,FIRE,25); }
+          }
+        }
+        if(t===ACID){
+          for(const s of [-1,1,-GW,GW]){
+            const j=i+s; if(j<0||j>=g.length) continue;
+            const n=g[j];
+            if(n!==EMPTY&&n!==ACID&&n!==WATER&&n!==FIRE&&n!==SMOKE&&n!==STEAM&&n!==LIGHTNING){
+              if(Math.random()<0.10){ if(Math.random()<0.3){g[j]=SMOKE;life[j]=40;} else g[j]=EMPTY;
+                if(Math.random()<0.25){setCell(i,SMOKE,30);} }
+            }
+          }
+        }
+        if(t===WATER){
+          for(const s of [-1,1,-GW,GW]){
+            const j=i+s; if(j<0||j>=g.length) continue;
+            if(g[j]===FIRE){ g[j]=STEAM; life[j]=70; }
+          }
+        }
+        continue;
+      }
+
+      /* ---------- FIRE ---------- */
+      if(t===FIRE){
+        L[i]--;
+        let out=false;
+        for(const s of [-1,1,-GW,GW]){
+          const j=i+s; if(j<0||j>=g.length) continue;
+          const n=g[j];
+          if(n===WATER||n===ICE) out=true;
+          else if(n===OIL){ if(Math.random()<0.55) setCell(j,FIRE,40); }
+          else if(n===WOOD){ if(Math.random()<0.03) setCell(j,FIRE,55); }
+          else if(n===PLANT){ if(Math.random()<0.14) setCell(j,FIRE,35); }
+          else if(n===POWDER){ boom(j,false,false); }
+          else if(n===BOMB){ boom(j,true,false); }
+          else if(n===ANT||n===FISH){ setCell(j,FIRE,25); }
+        }
+        if(L[i]<=0||out){ g[i]= Math.random()<0.35?SMOKE:EMPTY; if(g[i]===SMOKE)L[i]=40; continue; }
+        if(y>0){
+          const up=i-GW;
+          if(g[up]===EMPTY&&Math.random()<0.7){ swap(i,up); mk[up]=1; continue; }
+          const s=Math.random()<0.5?-1:1;
+          if(inb(x+s,y)&&g[i+s]===EMPTY&&Math.random()<0.3){ swap(i,i+s); mk[i+s]=1; continue; }
+        }
+        continue;
+      }
+
+      /* ---------- GASES ---------- */
+      if(t===SMOKE||t===STEAM){
+        L[i]--;
+        if(L[i]<=0){ g[i]= (t===STEAM&&Math.random()<0.12)?WATER:EMPTY; continue; }
+        if(y>0){
+          const up=i-GW;
+          if(g[up]===EMPTY&&Math.random()<0.8){ swap(i,up); mk[up]=1; continue; }
+          const s=Math.random()<0.5?-1:1;
+          if(inb(x+s,y)&&g[i+s]===EMPTY&&Math.random()<0.5){ swap(i,i+s); mk[i+s]=1; continue; }
+        }
+        continue;
+      }
+
+      /* ---------- PLANT ---------- */
+      if(t===PLANT){
+        if(Math.random()<0.05){
+          const s=[-1,1,-GW,GW][(Math.random()*4)|0];
+          const j=i+s; if(j<0||j>=g.length) continue;
+          if(g[j]===WATER){ g[j]=PLANT; }
+          else if(g[j]===EMPTY&&Math.random()<0.10){ g[j]=PLANT; }
+        }
+        continue;
+      }
+
+      /* ---------- ANT ---------- */
+      if(t===ANT){
+        L[i]--;
+        let hazard=false, food=false;
+        for(const s of [-1,1,-GW,GW]){ const j=i+s; if(j>=0&&j<g.length){ const n=g[j];
+          if(n===FIRE||n===LAVA||n===ACID) hazard=true;
+          if(n===PLANT) food=true; } }
+        let s=Math.random()<0.5?-1:1;
+        if(hazard) s=-s;
+        const j=i+s;
+        if(inb(x+s,y) && (g[j]===EMPTY||g[j]===SAND||g[j]===WATER) ){ swap(i,j); mk[j]=1;
+          if(food && Math.random()<0.3) L[j]=Math.min(L[j]+200,3000);
+        }
+        else if(y+1<GH && (g[below]===EMPTY||g[below]===WATER)){ swap(i,below); mk[below]=1; }
+        if(L[i]<=0 && Math.random()<0.05){ g[i]=EMPTY; }
+        continue;
+      }
+
+      /* ---------- FISH ---------- */
+      if(t===FISH){
+        L[i]--;
+        const s=Math.random()<0.5?-1:1;
+        const j=i+s;
+        if(inb(x+s,y)&&g[j]===WATER){ swap(i,j); mk[j]=1; }
+        else if(y+1<GH&&g[below]===WATER&&Math.random()<0.5){ swap(i,below); mk[below]=1; }
+        else if(y>0&&g[i-GW]===WATER&&Math.random()<0.3){ swap(i,i-GW); mk[i-GW]=1; }
+        if(L[i]<=0 && Math.random()<0.02){ g[i]=EMPTY; }
+        continue;
+      }
+
+      /* ---------- LIGHTNING (transient) ---------- */
+      if(t===LIGHTNING){
+        L[i]--;
+        if(L[i]<=0){ g[i]= Math.random()<0.6?FIRE:EMPTY; if(g[i]===FIRE)L[i]=15; }
+        continue;
+      }
+    }
+  }
+  tick++;
+}
+
+/* =============== EXPLOSION =============== */
+function boom(cx, nuclear, wide){
+  const ax=cx%GW, ay=(cx/GW)|0;
+  const R = nuclear?14:7;
+  for(let dy=-R;dy<=R;dy++){
+    for(let dx=-R;dx<=R;dx++){
+      const d2=dx*dx+dy*dy; if(d2>R*R) continue;
+      const x=ax+dx, y=ay+dy;
+      if(x<0||y<0||x>=GW||y>=GH) continue;
+      const i=y*GW+x;
+      const d=Math.sqrt(d2)/R;
+      if(d>=0.62 && Math.random()>0.75) continue;
+      if(nuclear){
+        if(d<0.4) setCell(i, Math.random()<0.7?FIRE:FIRE, 30+(Math.random()*40|0));
+        else setCell(i, Math.random()<0.5?NUKED:(Math.random()<0.5?FIRE:SMOKE), 30);
+      }else{
+        if(d<0.4) setCell(i, Math.random()<0.6?FIRE:(Math.random()<0.5?SAND:EMPTY), 20+(Math.random()*25|0));
+        else setCell(i, Math.random()<0.4?FIRE:(Math.random()<0.5?SMOKE:EMPTY), 20);
+      }
+    }
+  }
+  if(nuclear){
+    const R2=R+10;
+    for(let a=0;a<360;a+=8){
+      const rad=a*Math.PI/180;
+      for(let r=R;r<R2;r++){
+        const x=(ax+Math.cos(rad)*r)|0, y=(ay+Math.sin(rad)*r)|0;
+        if(x<0||y<0||x>=GW||y>=GH) continue;
+        const i=y*GW+x;
+        if(grid[i]!==STONE && Math.random()<0.35) setCell(i, Math.random()<0.5?NUKED:SMOKE, 40);
+      }
+    }
+  }
+}
+
+/* =============== LIGHTNING STRIKE =============== */
+function strike(cx){
+  let x=Math.max(1,Math.min(GW-2,cx)), y=0;
+  for(let k=0;k<GH;k++){
+    const i=y*GW+x; if(i<0||i>=grid.length) break;
+    setCell(i,LIGHTNING, 25+(Math.random()*25|0));
+    if(Math.random()<0.22){
+      let bx=x, by=y;
+      for(let b=0;b<10&&inb(bx,by);b++){ setCell(by*GW+bx,LIGHTNING,14); bx+=(Math.random()<0.5?-1:1); by++; }
+    }
+    const nb=grid[(y+1<GH?y+1:y)*GW+x];
+    if(nb===POWDER||nb===BOMB||nb===OIL||nb===LAVA){ boom((y)*GW+x, nb===BOMB,false); }
+    x += (Math.random()*3-1.5)|0;
+    if(x<0)x=0; if(x>=GW)x=GW-1;
+    y++;
+  }
+  emitSound(true);
+}
+
+/* =============== RENDER =============== */
+let imgBuf=null, imgCtx=null, imgData=null;
+function initRender(){
+  if(!imgBuf){ imgBuf=document.createElement('canvas'); imgCtx=imgBuf.getContext('2d'); }
+  imgBuf.width=GW; imgBuf.height=GH;
+  imgData=imgCtx.createImageData(GW,GH);
+}
+function draw(){
+  const d=imgData.data, g=grid, n=noise;
+  for(let i=0,p=0;i<g.length;i++,p+=4){
+    const t=g[i];
+    const c=BASE[t]||BASE[EMPTY];
+    let v=n[i];
+    if(t===FIRE||t===LAVA||t===LIGHTNING) v=(Math.random()*80-24)|0;
+    else if(t===NUKED) v=(Math.random()*40-12)|0;
+    d[p]=clampB(c[0]+v); d[p+1]=clampB(c[1]+v); d[p+2]=clampB(c[2]+v); d[p+3]=255;
+  }
+  imgCtx.putImageData(imgData,0,0);
+  ctx.drawImage(imgBuf,0,0);
+}
+
+/* =============== LOOP =============== */
+let last=0;
+function frame(ts){
+  requestAnimationFrame(frame);
+  if(!last) last=ts;
+  let dt=(ts-last)/1000; last=ts;
+  if(dt>0.12) dt=0.12;
+  if(!paused){
+    const steps = LITE?2:3;
+    for(let s=0;s<steps;s++) step();
+  }
+  draw();
+  if((tick&3)===0) updateHUD();
+}
+
+/* =============== HUD =============== */
+const elParticles=document.getElementById('particles');
+const elTick=document.getElementById('tick');
+const elFill=document.getElementById('fill');
+function updateHUD(){
+  let total=0;
+  const g=grid;
+  for(let i=0;i<g.length;i++) if(g[i]!==EMPTY) total++;
+  elParticles.textContent=total.toLocaleString();
+  elTick.textContent=tick;
+  elFill.textContent=((total/(GW*GH))*100).toFixed(0)+'%';
+}
+
+/* =============== INPUT =============== */
+function cellFromEvent(ev){
+  const r=cv.getBoundingClientRect();
+  const t=ev.touches&&ev.touches[0]?ev.touches[0]:ev;
+  const cx=t.clientX-r.left, cy=t.clientY-r.top;
+  return [ (cx/r.width*GW)|0, (cy/r.height*GH)|0 ];
+}
+let painting=false, lastCell=null;
+function paintAt(x,y){
+  const R=brush;
+  for(let dy=-R;dy<=R;dy++) for(let dx=-R;dx<=R;dx++){
+    if(dx*dx+dy*dy>R*R) continue;
+    const px=x+dx, py=y+dy; if(!inb(px,py)) continue;
+    const i=py*GW+px;
+    if(current===ERASER){ setCell(i,EMPTY,0); continue; }
+    if(current===LIGHTNING) continue;
+    if(current===BOMB||current===POWDER){ if(Math.random()<0.5) setCell(i,current,1); continue; }
+    if(current===PLANT){ if(grid[i]===EMPTY&&Math.random()<0.3) setCell(i,PLANT,0); continue; }
+    if(current===ANT||current===FISH){ if(Math.random()<0.10) setCell(i,current,900+(Math.random()*900|0)); continue; }
+    if(current===FIRE){ setCell(i,FIRE,30+(Math.random()*40|0)); continue; }
+    if(current===STEAM||current===SMOKE){ setCell(i,current,80+(Math.random()*60|0)); continue; }
+    setCell(i,current,0);
+  }
+}
+function stroke(x0,y0,x1,y1){
+  const dx=x1-x0, dy=y1-y0;
+  const n=Math.max(Math.abs(dx),Math.abs(dy))||1;
+  for(let k=0;k<=n;k++) paintAt(Math.round(x0+dx*k/n), Math.round(y0+dy*k/n));
+}
+function pointerDown(ev){
+  ev.preventDefault(); painting=true;
+  const [x,y]=cellFromEvent(ev);
+  if(current===LIGHTNING){ strike(x); emitSound(true); return; }
+  lastCell=[x,y]; paintAt(x,y); emitSound(true);
+}
+function pointerMove(ev){
+  if(!painting) return; ev.preventDefault();
+  const [x,y]=cellFromEvent(ev);
+  if(lastCell) stroke(lastCell[0],lastCell[1],x,y); else paintAt(x,y);
+  lastCell=[x,y];
+}
+function pointerUp(){ painting=false; lastCell=null; }
+
+/* =============== SOUND =============== */
+let AC=null;
+function emitSound(strong){
+  if(!soundOn) return;
+  try{
+    AC=AC||new (window.AudioContext||window.webkitAudioContext)();
+    const o=AC.createOscillator(), g=AC.createGain();
+    o.type='square';
+    o.frequency.value= strong?(110+Math.random()*90):(320+Math.random()*260);
+    g.gain.value=0.025;
+    o.connect(g); g.connect(AC.destination);
+    o.start(); g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime+0.08);
+    o.stop(AC.currentTime+0.1);
+  }catch(e){}
+}
+
+/* =============== MATERIALS UI =============== */
+const MATS=[
+  {id:SAND,     name:'Areia',    emoji:'🏖️'},
+  {id:WATER,    name:'Água',     emoji:'💧'},
+  {id:STONE,    name:'Pedra',    emoji:'🪨'},
+  {id:WOOD,     name:'Madeira',  emoji:'🪵'},
+  {id:ICE,      name:'Gelo',     emoji:'❄️'},
+  {id:PLANT,    name:'Planta',   emoji:'🌱'},
+  {id:FIRE,     name:'Fogo',     emoji:'🔥'},
+  {id:LAVA,     name:'Lava',     emoji:'🌋'},
+  {id:OIL,      name:'Gasolina', emoji:'⛽'},
+  {id:ACID,     name:'Ácido',    emoji:'🧪'},
+  {id:STEAM,    name:'Vapor',    emoji:'💨'},
+  {id:SMOKE,    name:'Fumaça',   emoji:'🌫️'},
+  {id:POWDER,   name:'Pólvora',  emoji:'💥'},
+  {id:BOMB,     name:'Bomba',    emoji:'💣'},
+  {id:LIGHTNING,name:'Raio',     emoji:'⚡'},
+  {id:NUKED,    name:'Nuclear',  emoji:'☢️'},
+  {id:ANT,      name:'Formiga',  emoji:'🐜'},
+  {id:FISH,     name:'Peixe',    emoji:'🐟'},
+  {id:ERASER,   name:'Borracha', emoji:'🧽'}
+];
+const elMats=document.getElementById('mats');
+const elName=document.getElementById('matName');
+function buildMats(){
+  elMats.innerHTML='';
+  MATS.forEach(m=>{
+    const b=document.createElement('button');
+    b.className='mat'+(m.id===current?' active':'');
+    b.innerHTML='<span class="ico">'+m.emoji+'</span><span>'+m.name+'</span>';
+    b.onclick=()=>{
+      current=m.id; elName.textContent=m.emoji+' '+m.name;
+      document.querySelectorAll('.mat').forEach(e=>e.classList.remove('active'));
+      b.classList.add('active');
+    };
+    elMats.appendChild(b);
+  });
+}
+
+/* =============== INIT =============== */
+resize();
+buildMats();
+window.addEventListener('resize',()=>{ resize(); });
+window.addEventListener('orientationchange',()=>setTimeout(resize,250));
+
+cv.addEventListener('mousedown',pointerDown);
+cv.addEventListener('mousemove',pointerMove);
+window.addEventListener('mouseup',pointerUp);
+cv.addEventListener('touchstart',pointerDown,{passive:false});
+cv.addEventListener('touchmove',pointerMove,{passive:false});
+cv.addEventListener('touchend',pointerUp);
+cv.addEventListener('touchcancel',pointerUp);
+
+document.getElementById('btnPause').onclick=function(){
+  paused=!paused; this.classList.toggle('on',paused);
+  this.querySelector('.ic').textContent = paused?'▶':'⏸';
+};
+document.getElementById('btnClear').onclick=()=>{ grid.fill(EMPTY); life.fill(0); };
+document.getElementById('btnRain').onclick=()=>{
+  for(let x=0;x<GW;x++) if(Math.random()<0.6) setCell(x,WATER,0);
+};
+document.getElementById('btnRainFire').onclick=()=>{
+  for(let x=0;x<GW;x++) if(Math.random()<0.6) setCell(x,FIRE,40);
+};
+const elLite=document.getElementById('btnLite');
+function refreshLite(){ elLite.querySelector('.ic').textContent='⚡';
+  elLite.classList.toggle('on',LITE); elLite.lastChild.textContent='Lite:'+(LITE?'ON':'OFF'); }
+elLite.onclick=()=>{ LITE=!LITE; refreshLite(); };
+document.getElementById('brushUp').onclick=()=>{ brush=Math.min(brush+1,20); };
+document.getElementById('brushDn').onclick=()=>{ brush=Math.max(brush-1,1); };
+
+refreshLite();
+setTimeout(()=>{ const h=document.getElementById('hint'); if(h)h.style.opacity='0'; },3200);
+
+/* seed a little terrain so it's not empty */
+(function seed(){
+  const mid=GH-4;
+  for(let x=0;x<GW;x++){
+    const h = mid - (Math.sin(x*0.05)*6 + Math.sin(x*0.017)*10)|0;
+    for(let y=h;y<GH;y++){ setCell(y*GW+x, y<h+3?SAND:STONE, 0); }
+  }
+})();
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
